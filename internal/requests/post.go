@@ -31,3 +31,8 @@ type GetPostByTagsWithPaginationRequest struct {
 	pkg_request.PaginationRequest
 	Tags []string `form:"tags"`
 }
+
+type GetPostForUserWithPagination struct {
+	pkg_request.PaginationRequest
+	UserId string `form:"userId"`
+}

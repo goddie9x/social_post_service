@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"post_service/internal/constants"
 	"post_service/internal/models"
 	"post_service/internal/repositories"
 	"post_service/internal/requests"
@@ -43,15 +44,15 @@ func NewPostService() repositories.PostRepository {
 	if err != nil {
 		log.Fatalf("Cannot connect to db %v", err)
 	}
-	db.AutoMigrate(&models.Tag{}, &models.Mention{}, &models.Post{})
+	db.AutoMigrate(&models.Tag{}, &models.Post{}, &models.Mention{})
 	return &PostService{
 		db: db,
 	}
 }
 
-func (ps *PostService) Create(post *models.Post) (int64, error) {
-	result := ps.db.Create(post)
-	return result.RowsAffected, result.Error
+func (ps *PostService) Create(post *models.Post) (err error) {
+	err = ps.db.Create(post).Error
+	return
 }
 
 func (ps *PostService) Update(post *models.Post) error {
@@ -76,19 +77,45 @@ func (ps *PostService) GetById(id string) (*models.Post, error) {
 	return target, nil
 }
 func (ps *PostService) GetPostsByTagWithPagination(request requests.GetPostByTagsWithPaginationRequest) (posts []models.Post, amountPage int64, err error) {
-	var tags []models.Tag
-	if err := ps.db.Model(&models.Tag{}).Where("Name in (?)", request.Tags).Find(&tags).Error; err != nil {
+	var postIds []uuid.UUID
+
+	if err = ps.db.Table("post_tags").
+		Select("post_id").
+		Where("tag_name IN ?", request.Tags).
+		Scan(&postIds).Error; err != nil {
 		return nil, invalid_amount, err
 	}
-	var postIds []uuid.UUID
-	for _, tag := range tags {
-		postIds = append(postIds, tag.PostId)
-	}
-	getPostsRequest := requests.GetPostWithPaginationRequest{
+	requestGetPostsByTag := requests.GetPostWithPaginationRequest{
 		PaginationRequest: request.PaginationRequest,
 		PostQuery:         postIds,
 	}
-	return ps.GetPostsWithPagination(getPostsRequest)
+	return ps.GetPostsWithPagination(requestGetPostsByTag)
+}
+func (ps *PostService) GetPostsForUserProfile(request requests.GetPostForUserWithPagination) (posts []models.Post, amountPage int64, err error) {
+	var totalCount int64
+
+	query := ps.db.Model(&models.Post{}).
+		Where("(type = ? AND owner_id = ?) OR id IN (SELECT post_id FROM mentions WHERE user_id = ? AND accepted_show_in_profile = true)",
+			constants.PersonalPost, request.UserId, request.UserId)
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err = query.
+		Preload("Mentions").
+		Preload("Tags").
+		Offset(request.GetOffset()).
+		Limit(request.GetSize()).
+		Order("created_at DESC").
+		Find(&posts).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+	amountPage = (totalCount + int64(request.GetSize()) - 1) / int64(request.GetSize())
+
+	return posts, amountPage, nil
 }
 func (ps *PostService) GetPostsWithPagination(request requests.GetPostWithPaginationInterface) (posts []models.Post, amountPage int64, err error) {
 	if posts, err = ps.FetchPosts(request); err != nil {

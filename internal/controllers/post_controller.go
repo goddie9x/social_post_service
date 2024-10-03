@@ -39,13 +39,9 @@ func (pc *PostController) Create(c *gin.Context) {
 		errors.HandleError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	rowEffected, err := pc.ps.Create(&post)
+	err := pc.ps.Create(&post)
 	if err != nil {
 		errors.HandleError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if rowEffected < 1 {
-		errors.HandleError(c, http.StatusInternalServerError, "Cannot create post, please try again")
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"post": post})
@@ -150,5 +146,28 @@ func (pc *PostController) GetPostByUserWithPagination(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"posts": posts, "amountPage": amountPage, "page": request.GetPage()})
 }
 func (pc *PostController) GetPostForUserWithPagination(c *gin.Context) {
+	var request request_internal.GetPostForUserWithPagination
 
+	if err := c.ShouldBindQuery(&request); err != nil {
+		errors.HandleError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userId := c.Query("userId")
+	if userId == "" {
+		errors.HandleError(c, http.StatusBadRequest, "userId is required")
+		return
+	}
+
+	posts, amountPage, err := pc.ps.GetPostsForUserProfile(request)
+	if err != nil {
+		errors.HandleError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"posts":      posts,
+		"amountPage": amountPage,
+		"page":       request.GetPage(),
+	})
 }

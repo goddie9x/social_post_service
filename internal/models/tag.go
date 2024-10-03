@@ -1,8 +1,6 @@
 package models
 
-import "github.com/google/uuid"
-
 type Tag struct {
-	PostId uuid.UUID `json:"postId" gorm:"foreignKey:postId,index"`
-	Name   string    `json:"name" gorm:"index"`
+	Name string  `json:"name" gorm:"primaryKey"`
+	Post []*Post `gorm:"many2many:post_tags;"`
 }

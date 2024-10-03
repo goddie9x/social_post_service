@@ -10,21 +10,24 @@ import (
 )
 
 type Post struct {
-	Id        uuid.UUID             `json:id gorm:"type:uuid,default:uuid_generate_v4(),primary_key"`
-	OwnerId   string                `json:ownerId binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:2;index:idx_owner"`
-	Type      constants.PostType    `json:type binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:3";index:idx_target_type_created_at`
-	TargetId  string                `json:targetId binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:1";index:idx_target_type_created_at`
-	Content   string                `json:content`
-	CreatedAt time.Time             `json:createAt gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:6,autoCreateTime,sort:desc"`
-	UpdateAt  time.Time             `json:updateAt gorm:"autoUpdateTime"`
-	Privacy   constants.PrivacyType `json:privacy gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:5"`
-	Approved  bool                  `json:approved gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:4"`
-	Mentions  []Mention             `json:"mentions"`
-	Tags      []Tag                 `json:"tags" gorm:"many2many:tag"`
+	Id        uuid.UUID             `json:"id" gorm:"type:varchar2(36);default:SYS_GUID();primaryKey"`
+	OwnerId   string                `json:"ownerId" binding:"required" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:2;index:idx_owner"`
+	Type      constants.PostType    `json:"type" binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:3;index:idx_target_type_created_at"`
+	TargetId  string                `json:"targetId" binding:"required" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:1;index:idx_target_type_created_at"`
+	Content   string                `json:"content" gorm:"type:text"`
+	CreatedAt time.Time             `json:"createdAt" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:6;autoCreateTime;sort:desc"`
+	UpdatedAt time.Time             `json:"updatedAt" gorm:"autoUpdateTime"`
+	Privacy   constants.PrivacyType `json:"privacy" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:5"`
+	Approved  bool                  `json:"approved" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:4"`
+	Mentions  []Mention             `json:"mentions" gorm:"foreignKey:PostId"`
+	Tags      []*Tag                `json:"tags" gorm:"many2many:post_tags;"`
 }
 
 func (p *Post) Validate() (err error) {
-	if p.Type == constants.GroupPost && p.Privacy != constants.Public {
+	if p.Type != constants.GroupPost {
+		return
+	}
+	if p.Privacy != constants.Public {
 		return errors.New("Group just allow public post")
 	}
 	return
@@ -33,6 +36,11 @@ func (p *Post) Validate() (err error) {
 func (p *Post) BeforeCreate(tx *gorm.DB) (err error) {
 	if err := p.Validate(); err != nil {
 		return err
+	}
+	if p.Type == constants.GroupPost {
+		for i := range p.Mentions {
+			p.Mentions[i].AcceptedShowInProfile = false
+		}
 	}
 	return
 }
@@ -63,8 +71,8 @@ func (p *Post) AcceptNewData(post *Post) {
 	if !post.CreatedAt.IsZero() {
 		p.CreatedAt = post.CreatedAt
 	}
-	if !post.UpdateAt.IsZero() {
-		p.UpdateAt = post.UpdateAt
+	if !post.UpdatedAt.IsZero() {
+		p.UpdatedAt = post.UpdatedAt
 	}
 	p.Privacy = post.Privacy
 	p.Approved = post.Approved
