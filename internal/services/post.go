@@ -1,14 +1,17 @@
 package services
 
 import (
+	"errors"
 	"log"
 	"os"
 	"post_service/internal/models"
 	"post_service/internal/repositories"
 	"post_service/internal/requests"
+	"post_service/pkg/dotenv"
 	"strconv"
 
 	oracle "github.com/godoes/gorm-oracle"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -22,8 +25,8 @@ type PostService struct {
 
 func NewPostService() repositories.PostRepository {
 	options := map[string]string{
-		"CONNECTION TIMEOUT": "90",
-		"SSL":                "false",
+		"CONNECTION TIMEOUT": dotenv.GetEnvOrDefaultValue("DB_CONNECTION_TIMEOUT", "90"),
+		"SSL":                dotenv.GetEnvOrDefaultValue("DB_SSL", "false"),
 	}
 	db_port, err := strconv.Atoi(os.Getenv("DB_PORT"))
 	if err != nil {
@@ -57,24 +60,47 @@ func (ps *PostService) Update(post *models.Post) error {
 		return err
 	}
 	target.AcceptNewData(post)
-	ps.db.Save(target)
+	if err = ps.db.Save(target).Error; err != nil {
+		return err
+	}
 	return nil
 }
 func (ps *PostService) GetById(id string) (*models.Post, error) {
+	if id == "" {
+		return nil, errors.New("id cannot be empty")
+	}
 	var target *models.Post
 	if err := ps.db.Preload("Mention").Preload("Tag").First(&target, id).Error; err != nil {
 		return nil, err
 	}
 	return target, nil
 }
-func (ps *PostService) GetAllWithPagination(request requests.GetPostWithPaginationInterface) (posts []models.Post, amount int64, err error) {
+func (ps *PostService) GetPostsByTagWithPagination(request requests.GetPostByTagsWithPaginationRequest) (posts []models.Post, amountPage int64, err error) {
+	var tags []models.Tag
+	if err := ps.db.Model(&models.Tag{}).Where("Name in (?)", request.Tags).Find(&tags).Error; err != nil {
+		return nil, invalid_amount, err
+	}
+	var postIds []uuid.UUID
+	for _, tag := range tags {
+		postIds = append(postIds, tag.PostId)
+	}
+	getPostsRequest := requests.GetPostWithPaginationRequest{
+		PaginationRequest: request.PaginationRequest,
+		PostQuery:         postIds,
+	}
+	return ps.GetPostsWithPagination(getPostsRequest)
+}
+func (ps *PostService) GetPostsWithPagination(request requests.GetPostWithPaginationInterface) (posts []models.Post, amountPage int64, err error) {
 	if posts, err = ps.FetchPosts(request); err != nil {
 		return nil, invalid_amount, err
 	}
-	if amount, err = ps.FetchAmountPosts(request); err != nil {
+	amount, err := ps.FetchAmountPosts(request)
+	if err != nil {
 		return nil, invalid_amount, err
 	}
-	return posts, amount, err
+	amountPage = (amount + int64(request.GetSize()) - 1) / int64(request.GetSize())
+
+	return posts, amountPage, err
 }
 
 func (ps *PostService) FetchPosts(request requests.GetPostWithPaginationInterface) ([]models.Post, error) {
@@ -98,6 +124,9 @@ func (ps *PostService) FetchAmountPosts(request requests.GetPostWithPaginationIn
 	return amount, nil
 }
 func (ps *PostService) DeleteById(id string) (err error) {
+	if id == "" {
+		return errors.New("id cannot be empty")
+	}
 	if err := ps.db.Delete(models.Post{}, id).Error; err != nil {
 		return err
 	}

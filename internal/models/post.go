@@ -9,21 +9,13 @@ import (
 	"gorm.io/gorm"
 )
 
-type Mention struct {
-	Post   Post   `json:"postId" gorm:"foreignKey:postId,index"`
-	UserId string `json:"userId" gorm:"index"`
-}
-type Tag struct {
-	PostId Post   `json:"postId" gorm:"foreignKey:postId,index"`
-	Name   string `json:"name" gorm:"index"`
-}
 type Post struct {
 	Id        uuid.UUID             `json:id gorm:"type:uuid,default:uuid_generate_v4(),primary_key"`
 	OwnerId   string                `json:ownerId binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:2;index:idx_owner"`
 	Type      constants.PostType    `json:type binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:3";index:idx_target_type_created_at`
 	TargetId  string                `json:targetId binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:1";index:idx_target_type_created_at`
 	Content   string                `json:content`
-	CreatedAt time.Time             `json:createAt gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:6,autoCreateTime"`
+	CreatedAt time.Time             `json:createAt gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:6,autoCreateTime,sort:desc"`
 	UpdateAt  time.Time             `json:updateAt gorm:"autoUpdateTime"`
 	Privacy   constants.PrivacyType `json:privacy gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:5"`
 	Approved  bool                  `json:approved gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:4"`

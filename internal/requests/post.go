@@ -1,7 +1,6 @@
 package requests
 
 import (
-	"post_service/internal/models"
 	pkg_request "post_service/pkg/requests"
 )
 
@@ -11,10 +10,24 @@ type GetPostWithPaginationInterface interface {
 }
 
 type GetPostWithPaginationRequest struct {
-	pagination pkg_request.PaginationRequest
-	postQuery  models.Post
+	pkg_request.PaginationRequest
+	PostQuery interface{}
 }
 
-func (r *GetPostWithPaginationRequest) GetQuery() models.Post {
-	return r.postQuery
+func (r GetPostWithPaginationRequest) GetQuery() interface{} {
+	return r.PostQuery
+}
+
+type GetPostInGroupWithPaginationRequest struct {
+	pkg_request.PaginationRequest
+	TargetId string `form:"targetId"`
+}
+
+func (r GetPostInGroupWithPaginationRequest) GetQuery() interface{} {
+	return r.TargetId
+}
+
+type GetPostByTagsWithPaginationRequest struct {
+	pkg_request.PaginationRequest
+	Tags []string `form:"tags"`
 }
