@@ -3,14 +3,19 @@ package repositories
 import (
 	"post_service/internal/models"
 	"post_service/internal/requests"
+	"post_service/pkg/exceptions"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type PostRepository interface {
-	Create(post *models.Post) error
-	Update(post *models.Post) error
-	GetById(id string) (*models.Post, error)
-	GetPostsByTagWithPagination(request requests.GetPostByTagsWithPaginationRequest) (posts []models.Post, amountPage int64, err error)
-	GetPostsWithPagination(request requests.GetPostWithPaginationInterface) (posts []models.Post, amountPage int64, err error)
-	GetPostsForUserProfile(request requests.GetPostForUserWithPagination) ([]models.Post, int64, error)
-	DeleteById(id string) error
+	Create(c *gin.Context) (*models.Post, exceptions.CommonExceptionInterface)
+	Update(c *gin.Context) (*models.Post, exceptions.CommonExceptionInterface)
+	GetById(c *gin.Context) (*models.Post, exceptions.CommonExceptionInterface)
+	DeleteById(c *gin.Context) exceptions.CommonExceptionInterface
+	GetPostsByTagWithPagination(c *gin.Context) ([]models.Post, int64, exceptions.CommonExceptionInterface)
+	GetPostsInGroupWithPagination(c *gin.Context) ([]models.Post, int64, exceptions.CommonExceptionInterface)
+	GetPostsWithPagination(request requests.GetPostWithPaginationInterface, additionalWhereClause func(*gorm.DB) *gorm.DB) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface)
+	GetPostsForUserProfile(c *gin.Context) ([]models.Post, int64, exceptions.CommonExceptionInterface)
 }
