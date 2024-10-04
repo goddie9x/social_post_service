@@ -1,3 +1,5 @@
-main.exe
-*.exe
+main.*
 pkg/
+main
+*.exe
+.env

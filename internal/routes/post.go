@@ -19,15 +19,15 @@ func MappingRoute(r *gin.Engine) {
 			posts := v1.Group("/posts")
 			{
 				pc := controllers.CreatePostController(services.NewPostService())
+				posts.Use(middlewares.PutAuthToContext)
 				posts.GET("/by-tag", pc.GetPostByTagWithPagination)
 				posts.GET("/by-mention", pc.GetPostByUserWithPagination)
 				posts.GET("/for-user", pc.GetPostForUserWithPagination)
 				posts.GET("/in-group", pc.GetPostInGroupWithPagination)
-				posts.GET("/:id", pc.GetById)
-				posts.Use(middlewares.PutAuthToContext)
 				posts.POST("/create", pc.Create)
 				posts.PATCH("/update", pc.Update)
 				posts.DELETE("/delete/:id", pc.DeleteById)
+				posts.GET("/:id", pc.GetById)
 			}
 		}
 	}
