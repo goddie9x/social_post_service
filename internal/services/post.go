@@ -69,7 +69,7 @@ func (ps *PostService) Create(c *gin.Context) (post *models.Post, ex exceptions.
 		return nil, exceptions.NewBadRequestException(err.Error())
 	}
 	post.OwnerId = currentUser.UserId
-	if err := ps.db.Create(post).Error; err != nil {
+	if err := ps.db.Create(&post).Error; err != nil {
 		return nil, exceptions.NewInternalErrorException(err.Error())
 	}
 	return post, nil
@@ -79,7 +79,7 @@ func (ps *PostService) Update(c *gin.Context) (post *models.Post, ex exceptions.
 	if err := c.ShouldBindJSON(&post); err != nil {
 		return nil, exceptions.NewBadRequestException(err.Error())
 	}
-	target, ex := ps.getById(post.Id.String())
+	target, ex := ps.getById(post.Id)
 	if ex != nil {
 		return nil, ex
 	}
@@ -98,7 +98,7 @@ func (ps *PostService) GetById(c *gin.Context) (*models.Post, exceptions.CommonE
 	if err := c.ShouldBind(post); err != nil {
 		return nil, exceptions.NewBadRequestException(err.Error())
 	}
-	id := post.Id.String()
+	id := post.Id
 	if id == "" {
 		return nil, exceptions.NewBadRequestException("Post id must provided")
 	}
@@ -132,7 +132,7 @@ func (ps *PostService) DeleteById(c *gin.Context) exceptions.CommonExceptionInte
 	if err := c.ShouldBind(post); err != nil {
 		return exceptions.NewBadRequestException(err.Error())
 	}
-	id := post.Id.String()
+	id := post.Id
 	if id == "" {
 		return exceptions.NewBadRequestException("Post id must provided")
 	}

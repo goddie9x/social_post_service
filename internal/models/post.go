@@ -10,10 +10,10 @@ import (
 )
 
 type Post struct {
-	Id        uuid.UUID             `json:"id" gorm:"type:varchar2(36);default:SYS_GUID();primaryKey"`
-	OwnerId   string                `json:"ownerId" binding:"required" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:2;index:idx_owner"`
+	Id        string                `json:"id" gorm:"type:raw(16);primaryKey"`
+	OwnerId   string                `json:"ownerId" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:2;index:idx_owner"`
 	Type      constants.PostType    `json:"type" binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:3;index:idx_target_type_created_at"`
-	TargetId  string                `json:"targetId" binding:"required" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:1;index:idx_target_type_created_at"`
+	TargetId  string                `json:"targetId" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:1;index:idx_target_type_created_at"`
 	Content   string                `json:"content" gorm:"type:text"`
 	CreatedAt time.Time             `json:"createdAt" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:6;autoCreateTime;sort:desc"`
 	UpdatedAt time.Time             `json:"updatedAt" gorm:"autoUpdateTime"`
@@ -21,9 +21,13 @@ type Post struct {
 	Approved  bool                  `json:"approved" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:4"`
 	Mentions  []Mention             `json:"mentions" gorm:"foreignKey:PostId"`
 	Tags      []*Tag                `json:"tags" gorm:"many2many:post_tags;"`
+	BlobIds   []string              `json:"blobIds" gorm:"-"`
 }
 
 func (p *Post) Validate() (err error) {
+	if p.Content == "" && len(p.BlobIds) < 1 {
+		return errors.New("Post must have either content nor attachment")
+	}
 	if p.Type != constants.GroupPost {
 		return
 	}
@@ -34,6 +38,9 @@ func (p *Post) Validate() (err error) {
 }
 
 func (p *Post) BeforeCreate(tx *gorm.DB) (err error) {
+	if p.Id == "" {
+		p.Id = uuid.New().String()
+	}
 	if err := p.Validate(); err != nil {
 		return err
 	}
@@ -52,6 +59,7 @@ func (p *Post) BeforeUpdate(tx *gorm.DB) (err error) {
 	return
 }
 func (p *Post) BeforeDelete(tx *gorm.DB) (err error) {
+	//todo delete all related blob
 	if err := tx.Where("postId = ?", p.Id).Delete(Mention{}).Error; err != nil {
 		return err
 	}
