@@ -4,18 +4,17 @@ import (
 	"post_service/internal/models"
 	"post_service/internal/requests"
 	"post_service/pkg/exceptions"
+	"post_service/pkg/middlewares"
 
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type PostRepository interface {
-	Create(c *gin.Context) (*models.Post, exceptions.CommonExceptionInterface)
-	Update(c *gin.Context) (*models.Post, exceptions.CommonExceptionInterface)
-	GetById(c *gin.Context) (*models.Post, exceptions.CommonExceptionInterface)
-	DeleteById(c *gin.Context) exceptions.CommonExceptionInterface
-	GetPostsByTagWithPagination(c *gin.Context) ([]models.Post, int64, exceptions.CommonExceptionInterface)
-	GetPostsInGroupWithPagination(c *gin.Context) ([]models.Post, int64, exceptions.CommonExceptionInterface)
-	GetPostsWithPagination(request requests.GetPostWithPaginationInterface, additionalWhereClause func(*gorm.DB) *gorm.DB) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface)
-	GetPostsForUserProfile(c *gin.Context) ([]models.Post, int64, exceptions.CommonExceptionInterface)
+	Create(middlewares.UserAuth, *models.Post) (*models.Post, exceptions.CommonExceptionInterface)
+	Update(middlewares.UserAuth, *models.Post) (*models.Post, exceptions.CommonExceptionInterface)
+	GetByIdIfUserCanView(currentUser middlewares.UserAuth, id string) (*models.Post, exceptions.CommonExceptionInterface)
+	DeleteById(currentUser middlewares.UserAuth, id string) exceptions.CommonExceptionInterface
+	GetPostsByTagWithPagination(middlewares.UserAuth, requests.GetPostByTagWithPaginationRequest) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface)
+	GetPostsWithPagination(requests.GetPostWithPaginationInterface, ...func(*gorm.DB) *gorm.DB) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface)
+	GetPostsForUserProfile(middlewares.UserAuth, requests.GetPostForUserWithPagination) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface)
 }

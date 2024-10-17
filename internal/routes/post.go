@@ -21,7 +21,7 @@ func MappingRoute(r *gin.Engine) {
 				pc := controllers.CreatePostController(services.NewPostService())
 				posts.Use(middlewares.PutAuthToContext)
 				posts.GET("/by-tag", pc.GetPostByTagWithPagination)
-				posts.GET("/by-mention", pc.GetPostByUserWithPagination)
+				posts.GET("/by-mention", pc.GetPostByMentionWithPagination)
 				posts.GET("/for-user", pc.GetPostForUserWithPagination)
 				posts.GET("/in-group", pc.GetPostInGroupWithPagination)
 				posts.POST("/create", pc.Create)

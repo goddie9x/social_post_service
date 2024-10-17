@@ -10,7 +10,7 @@ import (
 )
 
 type Post struct {
-	Id        string                `json:"id" gorm:"type:raw(16);primaryKey"`
+	Id        string                `json:"id" gorm:"type:varchar2(16);primaryKey"`
 	OwnerId   string                `json:"ownerId" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:2;index:idx_owner"`
 	Type      constants.PostType    `json:"type" binding:"required" gorm:"index:idx_target_owner_type_approved_privacy_created_at,priority:3;index:idx_target_type_created_at"`
 	TargetId  string                `json:"targetId" gorm:"type:varchar2(24);index:idx_target_owner_type_approved_privacy_created_at,priority:1;index:idx_target_type_created_at"`
@@ -45,6 +45,7 @@ func (p *Post) BeforeCreate(tx *gorm.DB) (err error) {
 		return err
 	}
 	if p.Type == constants.GroupPost {
+		//TODO: check group exist, and the default value of Accepted = true if group is public and auto accept post
 		for i := range p.Mentions {
 			p.Mentions[i].AcceptedShowInProfile = false
 		}
