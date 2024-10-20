@@ -27,6 +27,7 @@ type GetPostInGroupWithPaginationRequest struct {
 func (r GetPostInGroupWithPaginationRequest) GetQuery() map[string]interface{} {
 	return map[string]interface{}{
 		"target_id": r.TargetId,
+		"type":      constants.GroupPost,
 	}
 }
 

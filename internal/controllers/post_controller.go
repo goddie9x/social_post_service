@@ -34,62 +34,51 @@ func CreatePostController(ps repositories.PostRepository) PostControllerInterfac
 	}
 }
 func (pc *PostController) Create(c *gin.Context) {
-	var post *models.Post
+	var post models.Post
 	currentUser := middlewares.GetUserAuthFromContext(c)
-	if err := c.ShouldBindJSON(post); err != nil {
+	if err := c.ShouldBindJSON(&post); err != nil {
 		exceptions.HandleExceptionByGin(c, exceptions.NewBadRequestException(err.Error()))
 	}
-	post, ex := pc.ps.Create(currentUser, post)
+	createdPost, ex := pc.ps.Create(currentUser, post)
 
 	if ex != nil {
 		exceptions.HandleExceptionByGin(c, ex)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"post": post})
+	c.JSON(http.StatusCreated, gin.H{"post": createdPost})
 }
 func (pc *PostController) Update(c *gin.Context) {
-	var post *models.Post
-	if err := c.ShouldBindJSON(post); err != nil {
+	var post models.Post
+	if err := c.ShouldBindJSON(&post); err != nil {
 		ex := exceptions.NewBadRequestException(err.Error())
 		exceptions.HandleExceptionByGin(c, ex)
 		return
 	}
 	currentUser := middlewares.GetUserAuthFromContext(c)
 
-	post, ex := pc.ps.Update(currentUser, post)
+	updatedPost, ex := pc.ps.Update(currentUser, post)
 	if ex != nil {
 		exceptions.HandleExceptionByGin(c, ex)
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{"post": post})
+	c.JSON(http.StatusAccepted, gin.H{"post": updatedPost})
 }
 func (pc *PostController) GetById(c *gin.Context) {
-	var post *models.Post
+	postId := c.Param("id")
 	currentUser := middlewares.GetUserAuthFromContext(c)
-
-	if err := c.ShouldBind(post); err != nil {
-		ex := exceptions.NewBadRequestException(err.Error())
-		exceptions.HandleExceptionByGin(c, ex)
-		return
-	}
-	post, ex := pc.ps.GetByIdIfUserCanView(currentUser, post.Id)
+	target, ex := pc.ps.GetByIdIfUserCanView(currentUser, postId)
 
 	if ex != nil {
 		exceptions.HandleExceptionByGin(c, ex)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"post": post})
+	c.JSON(http.StatusOK, gin.H{"post": target})
 }
 func (pc *PostController) DeleteById(c *gin.Context) {
-	var post *models.Post
-	if err := c.ShouldBind(post); err != nil {
-		ex := exceptions.NewBadRequestException(err.Error())
-		exceptions.HandleExceptionByGin(c, ex)
-		return
-	}
+	postId := c.Param("id")
 	currentUser := middlewares.GetUserAuthFromContext(c)
 
-	if ex := pc.ps.DeleteById(currentUser, post.Id); ex != nil {
+	if ex := pc.ps.DeleteById(currentUser, postId); ex != nil {
 		exceptions.HandleExceptionByGin(c, ex)
 		return
 	}
@@ -139,7 +128,8 @@ func (pc *PostController) GetPostByMentionWithPagination(c *gin.Context) {
 		exceptions.HandleExceptionByGin(c, ex)
 		return
 	}
-	posts, amountPage, ex := pc.ps.GetPostsWithPagination(request, nil)
+	currentUser := middlewares.GetUserAuthFromContext(c)
+	posts, amountPage, ex := pc.ps.GetPostByMentionWithPagination(currentUser, request)
 	if ex != nil {
 		exceptions.HandleExceptionByGin(c, ex)
 		return

@@ -47,38 +47,40 @@ func NewPostService() repositories.PostRepository {
 	if err != nil {
 		log.Fatalf("Cannot connect to db %v", err)
 	}
-	db.AutoMigrate(&models.Tag{}, &models.Post{}, &models.Mention{})
+	db.AutoMigrate(&models.Tag{}, &models.Post{}, &models.Mention{}, &models.PostTag{})
 	return &PostService{
 		db: db,
 	}
 }
 func (ps *PostService) additionQueryPostBaseOnPostIds(Ids []string) func(*gorm.DB) *gorm.DB {
 	return func(query *gorm.DB) *gorm.DB {
+		if len(Ids) == 0 {
+			return query.Where("1=0")
+		}
 		return query.Where(Ids)
 	}
 }
 func (ps *PostService) additionQueryPostBaseOnUser(currentUser middlewares.UserAuth) func(*gorm.DB) *gorm.DB {
 	return func(query *gorm.DB) *gorm.DB {
 		if currentUser.Role == pkg_constants.User {
-			query.Where("owner_id = ?", currentUser.UserId)
+			query.Where(`"owner_id" = ?`, currentUser.UserId)
 		}
 		return query
 	}
 }
 
-func (ps *PostService) Create(currentUser middlewares.UserAuth, post *models.Post) (*models.Post, exceptions.CommonExceptionInterface) {
+func (ps *PostService) Create(currentUser middlewares.UserAuth, post models.Post) (*models.Post, exceptions.CommonExceptionInterface) {
 	post.OwnerId = currentUser.UserId
-	if post.Type == constants.PersonalPost && post.TargetId == currentUser.UserId {
+	if *post.Type == constants.PersonalPost && post.TargetId == currentUser.UserId {
 		post.Approved = true
 	}
 	if err := ps.db.Create(&post).Error; err != nil {
 		return nil, exceptions.NewInternalErrorException(err.Error())
 	}
-	return post, nil
+	return &post, nil
 }
 
-func (ps *PostService) Update(currentUser middlewares.UserAuth, post *models.Post) (*models.Post, exceptions.CommonExceptionInterface) {
-
+func (ps *PostService) Update(currentUser middlewares.UserAuth, post models.Post) (*models.Post, exceptions.CommonExceptionInterface) {
 	target, ex := ps.getById(post.Id)
 	if ex != nil {
 		return nil, ex
@@ -89,22 +91,22 @@ func (ps *PostService) Update(currentUser middlewares.UserAuth, post *models.Pos
 	if target == nil {
 		return nil, exceptions.NewTargetNotExistException("Post not exist")
 	}
-	if err := ps.db.Save(target).Error; err != nil {
-		return nil, exceptions.NewInternalErrorException(err.Error())
-	}
-	return post, nil
-}
-func (ps *PostService) GetByIdIfUserCanView(currentUser middlewares.UserAuth, id string) (*models.Post, exceptions.CommonExceptionInterface) {
-	var post *models.Post
-
-	if id == "" {
-		return nil, exceptions.NewBadRequestException("Post id must provided")
-	}
-	post, ex := ps.getById(id)
+	ex = target.AcceptNewDataForUpdate(&post)
 	if ex != nil {
 		return nil, ex
 	}
-	if post.Privacy == constants.Public {
+	if err := ps.db.Save(&target).Error; err != nil {
+		return nil, exceptions.NewInternalErrorException(err.Error())
+	}
+	return target, nil
+}
+func (ps *PostService) GetByIdIfUserCanView(currentUser middlewares.UserAuth, id string) (*models.Post, exceptions.CommonExceptionInterface) {
+	post, ex := ps.getById(id)
+
+	if ex != nil {
+		return nil, ex
+	}
+	if *post.Privacy == constants.Public {
 		return post, nil
 	}
 	//TODO: add check friend of owner by grpc
@@ -116,17 +118,19 @@ func (ps *PostService) GetByIdIfUserCanView(currentUser middlewares.UserAuth, id
 }
 
 func (ps *PostService) getById(id string) (*models.Post, exceptions.CommonExceptionInterface) {
-	var target *models.Post
-	if err := ps.db.Preload("Mention").Preload("Tag").First(&target, id).Error; err != nil {
+	if id == "" {
+		return nil, exceptions.NewBadRequestException("Post id is required")
+	}
+	target := models.Post{
+		Id: id,
+	}
+	if err := ps.db.Preload("Mentions").Preload("Tags").First(&target).Error; err != nil {
 		return nil, exceptions.NewInternalErrorException(err.Error())
 	}
-	return target, nil
+	return &target, nil
 }
 
 func (ps *PostService) DeleteById(currentUser middlewares.UserAuth, id string) exceptions.CommonExceptionInterface {
-	if id == "" {
-		return exceptions.NewBadRequestException("Post id must provided")
-	}
 	post, ex := ps.getById(id)
 	if ex != nil {
 		return ex
@@ -134,7 +138,7 @@ func (ps *PostService) DeleteById(currentUser middlewares.UserAuth, id string) e
 	if !validates.CanModifyTarget(currentUser, post.OwnerId) {
 		return exceptions.NewNotHavePermissionException()
 	}
-	if err := ps.db.Delete(models.Post{}, id).Error; err != nil {
+	if err := ps.db.Delete(&post).Error; err != nil {
 		return exceptions.NewInternalErrorException("Cannot delete post, please try again later")
 	}
 	return nil
@@ -147,29 +151,48 @@ func (ps *PostService) GetPostsByTagWithPagination(currentUser middlewares.UserA
 	var postIds []string
 
 	if err := ps.db.Table("post_tags").
-		Select("post_id").
-		Where("tag_name = ?", request.Tag).
+		Select(`"post_id"`).
+		Where(`"tag_name" = ?`, request.Tag).
 		Scan(&postIds).Error; err != nil {
 		return nil, invalid_amount, exceptions.NewInternalErrorException(err.Error())
 	}
 	requestGetPostsByTag := requests.GetPostWithPaginationRequest{
 		PaginationRequest: request.PaginationRequest,
 	}
-	additionQuery := ps.additionQueryPostBaseOnUser(currentUser)
-	return ps.GetPostsWithPagination(requestGetPostsByTag, additionQuery)
+	additionQueryBaseOnUser := ps.additionQueryPostBaseOnUser(currentUser)
+	additionQueryBaseOnPostIds := ps.additionQueryPostBaseOnPostIds(postIds)
+	return ps.GetPostsWithPagination(requestGetPostsByTag, additionQueryBaseOnUser, additionQueryBaseOnPostIds)
+}
+func (ps *PostService) GetPostByMentionWithPagination(currentUser middlewares.UserAuth, request requests.GetPostByMentionWithPaginationRequest) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface) {
+	if request.Mention == "" {
+		return nil, invalid_amount, exceptions.NewBadRequestException("Mention not provided")
+	}
+	var postIds []string
+
+	if err := ps.db.Table("mentions").
+		Select(`"post_id"`).
+		Where(`"user_id" = ?`, request.Mention).
+		Scan(&postIds).Error; err != nil {
+		return nil, invalid_amount, exceptions.NewInternalErrorException(err.Error())
+	}
+	requestGetPostsByMention := requests.GetPostWithPaginationRequest{
+		PaginationRequest: request.PaginationRequest,
+	}
+	additionQueryBaseOnPostIds := ps.additionQueryPostBaseOnPostIds(postIds)
+	return ps.GetPostsWithPagination(requestGetPostsByMention, additionQueryBaseOnPostIds)
 }
 func (ps *PostService) GetPostsForUserProfile(currentUser middlewares.UserAuth, request requests.GetPostForUserWithPagination) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface) {
 	if request.UserId == "" {
 		return nil, invalid_amount, exceptions.NewBadRequestException("userId is required")
 	}
 	var totalCount int64
-	whereClause := "(type = ? AND owner_id = ? "
+	whereClause := `("type" = ? AND "owner_id" = ? `
 	query := ps.db.Model(&models.Post{})
 
 	if !validates.CanModifyTarget(currentUser, request.UserId) {
-		whereClause += "AND privacy = " + fmt.Sprintf("%v", constants.Private)
+		whereClause += `AND "privacy" = ` + fmt.Sprintf("%v", constants.Private)
 	}
-	whereClause += ") OR id IN (SELECT post_id FROM mentions WHERE user_id = ? AND accepted_show_in_profile = true)"
+	whereClause += `) OR "id" IN (SELECT "post_id" FROM "mentions" WHERE "user_id" = ? AND "accepted_show_in_profile" = 1)`
 	query.Where(whereClause,
 		constants.PersonalPost, request.UserId, request.UserId)
 
@@ -182,7 +205,7 @@ func (ps *PostService) GetPostsForUserProfile(currentUser middlewares.UserAuth, 
 		Preload("Tags").
 		Offset(request.GetOffset()).
 		Limit(request.GetSize()).
-		Order("created_at DESC").
+		Order(`"created_at" DESC`).
 		Find(&posts).Error
 
 	if err != nil {
@@ -208,10 +231,12 @@ func (ps *PostService) GetPostsWithPagination(request requests.GetPostWithPagina
 func (ps *PostService) FetchPosts(request requests.GetPostWithPaginationInterface, additionOptionsWrappers ...func(*gorm.DB) *gorm.DB) ([]models.Post, exceptions.CommonExceptionInterface) {
 	var posts []models.Post
 	query := ps.db.Model(&models.Post{}).Offset(request.GetOffset()).
-		Preload("Mention").
-		Preload("Tag").Limit(request.GetSize())
+		Preload("Mentions").
+		Preload("Tags").Limit(request.GetSize())
 	for _, additionQuery := range additionOptionsWrappers {
-		query = additionQuery(query)
+		if additionQuery != nil {
+			query = additionQuery(query)
+		}
 	}
 	err := query.
 		Where(request.GetQuery()).Find(&posts).Error
@@ -226,7 +251,9 @@ func (ps *PostService) FetchAmountPosts(request requests.GetPostWithPaginationIn
 	query := ps.db.Model(&models.Post{}).
 		Where(request.GetQuery())
 	for _, additionQuery := range additionOptionsWrappers {
-		query = additionQuery(query)
+		if additionQuery != nil {
+			query = additionQuery(query)
+		}
 	}
 	err := query.
 		Count(&amount).Error

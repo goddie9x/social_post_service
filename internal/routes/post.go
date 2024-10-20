@@ -26,7 +26,7 @@ func MappingRoute(r *gin.Engine) {
 				posts.GET("/in-group", pc.GetPostInGroupWithPagination)
 				posts.POST("/create", pc.Create)
 				posts.PATCH("/update", pc.Update)
-				posts.DELETE("/delete/:id", pc.DeleteById)
+				posts.DELETE("/:id", pc.DeleteById)
 				posts.GET("/:id", pc.GetById)
 			}
 		}
