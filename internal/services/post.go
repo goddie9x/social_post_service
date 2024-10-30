@@ -8,10 +8,9 @@ import (
 	"post_service/internal/models"
 	"post_service/internal/repositories"
 	"post_service/internal/requests"
-	pkg_constants "post_service/pkg/constants"
+	"post_service/internal/responses"
 	"post_service/pkg/dotenv"
 	"post_service/pkg/exceptions"
-	"post_service/pkg/middlewares"
 	"post_service/pkg/validates"
 	"strconv"
 
@@ -52,68 +51,76 @@ func NewPostService() repositories.PostRepository {
 		db: db,
 	}
 }
-func (ps *PostService) additionQueryPostBaseOnPostIds(Ids []string) func(*gorm.DB) *gorm.DB {
-	return func(query *gorm.DB) *gorm.DB {
-		if len(Ids) == 0 {
-			return query.Where("1=0")
-		}
-		return query.Where(Ids)
+
+func (ps *PostService) Create(request requests.PostWithAuthRequest) responses.PostResponse {
+	userId := request.User.UserId
+	request.Post.OwnerId = userId
+	if *request.Post.Type == constants.PersonalPost && request.Post.TargetId == userId {
+		request.Post.Approved = true
 	}
-}
-func (ps *PostService) additionQueryPostBaseOnUser(currentUser middlewares.UserAuth) func(*gorm.DB) *gorm.DB {
-	return func(query *gorm.DB) *gorm.DB {
-		if currentUser.Role == pkg_constants.User {
-			query.Where(`"owner_id" = ?`, currentUser.UserId)
+	if err := ps.db.Create(&request.Post).Error; err != nil {
+		return responses.PostResponse{
+			Ex: exceptions.NewInternalErrorException(err.Error()),
 		}
-		return query
+	}
+	return responses.PostResponse{
+		Post: &request.Post,
 	}
 }
 
-func (ps *PostService) Create(currentUser middlewares.UserAuth, post models.Post) (*models.Post, exceptions.CommonExceptionInterface) {
-	post.OwnerId = currentUser.UserId
-	if *post.Type == constants.PersonalPost && post.TargetId == currentUser.UserId {
-		post.Approved = true
-	}
-	if err := ps.db.Create(&post).Error; err != nil {
-		return nil, exceptions.NewInternalErrorException(err.Error())
-	}
-	return &post, nil
-}
-
-func (ps *PostService) Update(currentUser middlewares.UserAuth, post models.Post) (*models.Post, exceptions.CommonExceptionInterface) {
-	target, ex := ps.getById(post.Id)
+func (ps *PostService) Update(request requests.PostWithAuthRequest) responses.PostResponse {
+	target, ex := ps.getById(request.Post.Id)
 	if ex != nil {
-		return nil, ex
+		return responses.PostResponse{
+			Ex: ex,
+		}
 	}
-	if !validates.CanModifyTarget(currentUser, target.OwnerId) {
-		return nil, exceptions.NewNotHavePermissionException()
+	if !validates.CanModifyTarget(request.User, target.OwnerId) {
+		return responses.PostResponse{
+			Ex: exceptions.NewNotHavePermissionException(),
+		}
 	}
 	if target == nil {
-		return nil, exceptions.NewTargetNotExistException("Post not exist")
+		return responses.PostResponse{
+			Ex: exceptions.NewTargetNotExistException("Post not exist"),
+		}
 	}
-	ex = target.AcceptNewDataForUpdate(&post)
+	ex = target.AcceptNewDataForUpdate(&request.Post)
 	if ex != nil {
-		return nil, ex
+		return responses.PostResponse{
+			Ex: ex,
+		}
 	}
 	if err := ps.db.Save(&target).Error; err != nil {
-		return nil, exceptions.NewInternalErrorException(err.Error())
+		return responses.PostResponse{
+			Ex: exceptions.NewInternalErrorException(err.Error()),
+		}
 	}
-	return target, nil
+	return responses.PostResponse{
+		Post: target,
+	}
 }
-func (ps *PostService) GetByIdIfUserCanView(currentUser middlewares.UserAuth, id string) (*models.Post, exceptions.CommonExceptionInterface) {
-	post, ex := ps.getById(id)
-
+func (ps *PostService) GetByIdIfUserCanView(request requests.RequestWithAuthAndId) responses.PostResponse {
+	post, ex := ps.getById(request.Id)
 	if ex != nil {
-		return nil, ex
+		return responses.PostResponse{
+			Ex: ex,
+		}
 	}
 	if *post.Privacy == constants.Public {
-		return post, nil
+		return responses.PostResponse{
+			Post: post,
+		}
 	}
 	//TODO: add check friend of owner by grpc
-	if validates.CanModifyTarget(currentUser, post.OwnerId) {
-		return post, nil
+	if validates.CanModifyTarget(request.User, post.OwnerId) {
+		return responses.PostResponse{
+			Post: post,
+		}
 	} else {
-		return nil, exceptions.NewNotHavePermissionException()
+		return responses.PostResponse{
+			Ex: exceptions.NewNotHavePermissionException(),
+		}
 	}
 }
 
@@ -130,23 +137,34 @@ func (ps *PostService) getById(id string) (*models.Post, exceptions.CommonExcept
 	return &target, nil
 }
 
-func (ps *PostService) DeleteById(currentUser middlewares.UserAuth, id string) exceptions.CommonExceptionInterface {
-	post, ex := ps.getById(id)
+func (ps *PostService) DeleteById(request requests.RequestWithAuthAndId) responses.PostResponse {
+	post, ex := ps.getById(request.Id)
 	if ex != nil {
-		return ex
+		return responses.PostResponse{
+			Ex: ex,
+		}
 	}
-	if !validates.CanModifyTarget(currentUser, post.OwnerId) {
-		return exceptions.NewNotHavePermissionException()
+	if !validates.CanModifyTarget(request.User, post.OwnerId) {
+		return responses.PostResponse{
+			Ex: exceptions.NewNotHavePermissionException(),
+		}
 	}
 	if err := ps.db.Delete(&post).Error; err != nil {
-		return exceptions.NewInternalErrorException("Cannot delete post, please try again later")
+		return responses.PostResponse{
+			Ex: exceptions.NewInternalErrorException("Cannot delete post, please try again later"),
+		}
 	}
-	return nil
+	return responses.PostResponse{
+		Post: post,
+	}
 }
 
-func (ps *PostService) GetPostsByTagWithPagination(currentUser middlewares.UserAuth, request requests.GetPostByTagWithPaginationRequest) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface) {
+func (ps *PostService) GetPostsByTagWithPagination(request requests.GetPostByTagWithPaginationRequest) responses.ListPostWithPaginationResponse {
 	if request.Tag == "" {
-		return nil, invalid_amount, exceptions.NewBadRequestException("Tag not provided")
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         exceptions.NewBadRequestException("Tag not provided"),
+		}
 	}
 	var postIds []string
 
@@ -154,18 +172,20 @@ func (ps *PostService) GetPostsByTagWithPagination(currentUser middlewares.UserA
 		Select(`"post_id"`).
 		Where(`"tag_name" = ?`, request.Tag).
 		Scan(&postIds).Error; err != nil {
-		return nil, invalid_amount, exceptions.NewInternalErrorException(err.Error())
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         exceptions.NewInternalErrorException(err.Error()),
+		}
 	}
-	requestGetPostsByTag := requests.GetPostWithPaginationRequest{
-		PaginationRequest: request.PaginationRequest,
-	}
-	additionQueryBaseOnUser := ps.additionQueryPostBaseOnUser(currentUser)
-	additionQueryBaseOnPostIds := ps.additionQueryPostBaseOnPostIds(postIds)
-	return ps.GetPostsWithPagination(requestGetPostsByTag, additionQueryBaseOnUser, additionQueryBaseOnPostIds)
+	request.PostIds = postIds
+	return ps.GetPostsWithPagination(request)
 }
-func (ps *PostService) GetPostByMentionWithPagination(currentUser middlewares.UserAuth, request requests.GetPostByMentionWithPaginationRequest) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface) {
+func (ps *PostService) GetPostByMentionWithPagination(request requests.GetPostByMentionWithPaginationRequest) responses.ListPostWithPaginationResponse {
 	if request.Mention == "" {
-		return nil, invalid_amount, exceptions.NewBadRequestException("Mention not provided")
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         exceptions.NewBadRequestException("Mention not provided"),
+		}
 	}
 	var postIds []string
 
@@ -173,23 +193,27 @@ func (ps *PostService) GetPostByMentionWithPagination(currentUser middlewares.Us
 		Select(`"post_id"`).
 		Where(`"user_id" = ?`, request.Mention).
 		Scan(&postIds).Error; err != nil {
-		return nil, invalid_amount, exceptions.NewInternalErrorException(err.Error())
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         exceptions.NewInternalErrorException(err.Error()),
+		}
 	}
-	requestGetPostsByMention := requests.GetPostWithPaginationRequest{
-		PaginationRequest: request.PaginationRequest,
-	}
-	additionQueryBaseOnPostIds := ps.additionQueryPostBaseOnPostIds(postIds)
-	return ps.GetPostsWithPagination(requestGetPostsByMention, additionQueryBaseOnPostIds)
+	request.PostIds = postIds
+
+	return ps.GetPostsWithPagination(request)
 }
-func (ps *PostService) GetPostsForUserProfile(currentUser middlewares.UserAuth, request requests.GetPostForUserWithPagination) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface) {
+func (ps *PostService) GetPostsForUserProfile(request requests.GetPostForUserWithPagination) responses.ListPostWithPaginationResponse {
 	if request.UserId == "" {
-		return nil, invalid_amount, exceptions.NewBadRequestException("userId is required")
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         exceptions.NewBadRequestException("userId is required"),
+		}
 	}
 	var totalCount int64
 	whereClause := `("type" = ? AND "owner_id" = ? `
 	query := ps.db.Model(&models.Post{})
 
-	if !validates.CanModifyTarget(currentUser, request.UserId) {
+	if !validates.CanModifyTarget(request.User, request.UserId) {
 		whereClause += `AND "privacy" = ` + fmt.Sprintf("%v", constants.Private)
 	}
 	whereClause += `) OR "id" IN (SELECT "post_id" FROM "mentions" WHERE "user_id" = ? AND "accepted_show_in_profile" = 1)`
@@ -197,9 +221,12 @@ func (ps *PostService) GetPostsForUserProfile(currentUser middlewares.UserAuth, 
 		constants.PersonalPost, request.UserId, request.UserId)
 
 	if err := query.Count(&totalCount).Error; err != nil {
-		return nil, 0, exceptions.NewInternalErrorException(err.Error())
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         exceptions.NewInternalErrorException(err.Error()),
+		}
 	}
-
+	var posts []models.Post
 	err := query.
 		Preload("Mentions").
 		Preload("Tags").
@@ -209,26 +236,45 @@ func (ps *PostService) GetPostsForUserProfile(currentUser middlewares.UserAuth, 
 		Find(&posts).Error
 
 	if err != nil {
-		return nil, 0, exceptions.NewInternalErrorException(err.Error())
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         exceptions.NewInternalErrorException(err.Error()),
+		}
 	}
-	amountPage = (totalCount + int64(request.GetSize()) - 1) / int64(request.GetSize())
-
-	return posts, amountPage, nil
+	amountPage := (totalCount + int64(request.GetSize()) - 1) / int64(request.GetSize())
+	return responses.ListPostWithPaginationResponse{
+		Posts:      posts,
+		AmountPage: amountPage,
+	}
 }
-func (ps *PostService) GetPostsWithPagination(request requests.GetPostWithPaginationInterface, additionalWhereClauses ...func(*gorm.DB) *gorm.DB) (posts []models.Post, amountPage int64, ex exceptions.CommonExceptionInterface) {
-	if posts, ex = ps.FetchPosts(request, additionalWhereClauses...); ex != nil {
-		return nil, invalid_amount, ex
-	}
-	amount, ex := ps.FetchAmountPosts(request, additionalWhereClauses...)
+func (ps *PostService) GetPostsWithPagination(request requests.GetPostWithPaginationInterface) responses.ListPostWithPaginationResponse {
+	var posts []models.Post
+	additionQuery := request.GetAdditionWhereClause()
+	posts, ex := ps.FetchPosts(request, additionQuery)
+
 	if ex != nil {
-		return nil, invalid_amount, ex
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         ex,
+		}
 	}
-	amountPage = (amount + int64(request.GetSize()) - 1) / int64(request.GetSize())
+	amount, ex := ps.FetchAmountPosts(request, additionQuery)
 
-	return posts, amountPage, nil
+	if ex != nil {
+		return responses.ListPostWithPaginationResponse{
+			AmountPage: invalid_amount,
+			Ex:         ex,
+		}
+	}
+	amountPage := (amount + int64(request.GetSize()) - 1) / int64(request.GetSize())
+
+	return responses.ListPostWithPaginationResponse{
+		Posts:      posts,
+		AmountPage: amountPage,
+	}
 }
 
-func (ps *PostService) FetchPosts(request requests.GetPostWithPaginationInterface, additionOptionsWrappers ...func(*gorm.DB) *gorm.DB) ([]models.Post, exceptions.CommonExceptionInterface) {
+func (ps *PostService) FetchPosts(request requests.GetPostWithPaginationInterface, additionOptionsWrappers []func(*gorm.DB) *gorm.DB) ([]models.Post, exceptions.CommonExceptionInterface) {
 	var posts []models.Post
 	query := ps.db.Model(&models.Post{}).Offset(request.GetOffset()).
 		Preload("Mentions").
@@ -245,7 +291,7 @@ func (ps *PostService) FetchPosts(request requests.GetPostWithPaginationInterfac
 	}
 	return posts, nil
 }
-func (ps *PostService) FetchAmountPosts(request requests.GetPostWithPaginationInterface, additionOptionsWrappers ...func(*gorm.DB) *gorm.DB) (int64, exceptions.CommonExceptionInterface) {
+func (ps *PostService) FetchAmountPosts(request requests.GetPostWithPaginationInterface, additionOptionsWrappers []func(*gorm.DB) *gorm.DB) (int64, exceptions.CommonExceptionInterface) {
 	var amount int64
 
 	query := ps.db.Model(&models.Post{}).
