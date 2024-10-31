@@ -1,8 +1,8 @@
 package requests
 
 import (
-	"post_service/internal/constants"
 	"post_service/internal/models"
+	"post_service/pkg/constants"
 	pkg_constants "post_service/pkg/constants"
 	"post_service/pkg/middlewares"
 	pkg_request "post_service/pkg/requests"

@@ -1,9 +1,9 @@
 package models
 
 import (
-	"blob_store_service/pkg/exceptions"
 	"errors"
-	"post_service/internal/constants"
+	"post_service/pkg/constants"
+	"post_service/pkg/exceptions"
 	"time"
 
 	"github.com/google/uuid"
