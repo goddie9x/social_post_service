@@ -3,7 +3,7 @@
 FROM golang:1.23-alpine AS builder
 RUN apk add --no-cache git protoc
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2 && \
-    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
 ENV PATH=$PATH:/root/go/bin
 WORKDIR /src
 COPY go.mod go.sum ./
