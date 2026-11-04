@@ -77,7 +77,10 @@ func additionQueryPostBaseOnPostIds(Ids []string) func(*gorm.DB) *gorm.DB {
 }
 func additionQueryPostBaseOnUser(currentUser middlewares.UserAuth) func(*gorm.DB) *gorm.DB {
 	return func(query *gorm.DB) *gorm.DB {
-		if currentUser.Role == pkg_constants.User {
+		// Scope to owner's posts for regular users AND unauthenticated requests.
+		// Unauthenticated (Role=Unknown, empty UserId) gets a query matching
+		// nothing, instead of leaking all posts system-wide.
+		if currentUser.Role == pkg_constants.User || currentUser.Role == pkg_constants.Unknown {
 			query.Where(`"owner_id" = ?`, currentUser.UserId)
 		}
 		return query
