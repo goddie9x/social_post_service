@@ -2,8 +2,8 @@ package models
 
 import (
 	"errors"
-	"post_service/pkg/constants"
-	"post_service/pkg/exceptions"
+	"github.com/goddie9x/social_utils_go/constants"
+	"github.com/goddie9x/social_utils_go/exceptions"
 	"time"
 
 	"github.com/google/uuid"

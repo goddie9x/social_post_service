@@ -6,8 +6,8 @@ import (
 	"post_service/internal/repositories"
 	"post_service/internal/requests"
 	request_internal "post_service/internal/requests"
-	"post_service/pkg/exceptions"
-	"post_service/pkg/middlewares"
+	"github.com/goddie9x/social_utils_go/exceptions"
+	"github.com/goddie9x/social_utils_go/middlewares"
 
 	"github.com/gin-gonic/gin"
 )

@@ -2,10 +2,10 @@ package requests
 
 import (
 	"post_service/internal/models"
-	"post_service/pkg/constants"
-	pkg_constants "post_service/pkg/constants"
-	"post_service/pkg/middlewares"
-	pkg_request "post_service/pkg/requests"
+	"github.com/goddie9x/social_utils_go/constants"
+	pkg_constants "github.com/goddie9x/social_utils_go/constants"
+	"github.com/goddie9x/social_utils_go/middlewares"
+	pkg_request "github.com/goddie9x/social_utils_go/requests"
 
 	"gorm.io/gorm"
 )

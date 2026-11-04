@@ -6,8 +6,8 @@ import (
 
 	"post_service/internal/grpc"
 	"post_service/internal/routes"
-	"post_service/pkg/configs"
-	"post_service/pkg/dotenv"
+	"github.com/goddie9x/social_utils_go/configs"
+	"github.com/goddie9x/social_utils_go/dotenv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"

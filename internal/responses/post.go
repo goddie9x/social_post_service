@@ -2,7 +2,7 @@ package responses
 
 import (
 	"post_service/internal/models"
-	"post_service/pkg/exceptions"
+	"github.com/goddie9x/social_utils_go/exceptions"
 )
 
 type PostResponse struct {

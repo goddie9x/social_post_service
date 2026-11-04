@@ -11,7 +11,7 @@ import (
 	"post_service/internal/repositories"
 	"post_service/internal/requests"
 	"post_service/internal/services"
-	pkg_request "post_service/pkg/requests"
+	pkg_request "github.com/goddie9x/social_utils_go/requests"
 
 	"google.golang.org/grpc"
 )

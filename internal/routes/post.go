@@ -3,8 +3,8 @@ package routes
 import (
 	"post_service/internal/controllers"
 	"post_service/internal/services"
-	pkg "post_service/pkg/eureka"
-	"post_service/pkg/middlewares"
+	pkg "github.com/goddie9x/social_utils_go/eureka"
+	"github.com/goddie9x/social_utils_go/middlewares"
 	"time"
 
 	"github.com/gin-gonic/gin"
